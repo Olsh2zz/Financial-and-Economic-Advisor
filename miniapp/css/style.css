@@ -1,0 +1,567 @@
+/*
+  Файл: style.css
+  Назначение: оформление мини-приложения: тёмно-зелёный фон, светлая
+  лаймовая карточка баланса, лента операций. Тема одна, от темы клиента
+  Telegram цвета не зависят.
+*/
+
+:root {
+  color-scheme: dark;
+  /* Цвет фона продублирован в js/app.js для шапки клиента Telegram. */
+  --bg: #0a1304;
+  --card: #141f0b;
+  --raised: #1e2c12;
+  --text: #f1f6e6;
+  --hint: #98a688;
+  --lime: #c8f03c;
+  --lime-light: #e2f873;
+  --ink: #101a08;
+  --danger: #ff7d6b;
+  --line: rgba(255, 255, 255, 0.09);
+  --tabs-height: 60px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--hint);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px 16px calc(var(--tabs-height) + var(--safe-bottom) + 96px);
+}
+
+.icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Шапка первого экрана: кружок с первой буквой имени и подпись. */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--lime);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Светлая карточка баланса. Текст на ней тёмный. */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 18px;
+  border-radius: 26px;
+  background: linear-gradient(155deg, var(--lime-light), var(--lime) 70%, #b2dd24);
+  color: var(--ink);
+}
+
+.hero-title {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.balance {
+  font-size: clamp(32px, 11vw, 44px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.balance small {
+  font-size: 0.5em;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: rgba(16, 26, 8, 0.1);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip .icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Быстрые действия: тёмная кнопка со значком и подпись под ней. */
+.quick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.action .icon {
+  width: 48px;
+  height: 48px;
+  padding: 13px;
+  border-radius: 16px;
+  background: var(--ink);
+  color: var(--lime);
+}
+
+.section-head {
+  margin-top: 6px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 14px 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.pill .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pill.active {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+
+/* Лента операций. */
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed h3 {
+  margin-top: 8px;
+}
+
+.operation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--text);
+  text-align: left;
+}
+
+.badge {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 13px;
+  background: var(--raised);
+}
+
+.badge.income {
+  color: var(--lime);
+}
+
+.badge.expense {
+  color: var(--danger);
+}
+
+.operation .grow,
+.operation .side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.operation .grow {
+  flex: 1;
+}
+
+.operation .side {
+  align-items: flex-end;
+  flex: none;
+}
+
+.name {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--hint);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--card);
+}
+
+.hint {
+  color: var(--hint);
+  font-size: 14px;
+}
+
+.empty {
+  padding: 24px 8px;
+  text-align: center;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.amount.income {
+  color: var(--lime);
+}
+
+.amount.expense {
+  color: var(--danger);
+}
+
+/* Фильтры и поля ввода. */
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--hint);
+}
+
+input[type="text"],
+input[type="date"],
+input[type="datetime-local"],
+select,
+textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+}
+
+input::placeholder {
+  color: var(--hint);
+}
+
+textarea {
+  resize: vertical;
+  font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre;
+}
+
+:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+.hero :focus-visible {
+  outline-color: var(--ink);
+}
+
+.button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--text);
+}
+
+.button.primary {
+  border-color: transparent;
+  background: var(--lime);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.button.danger {
+  color: var(--danger);
+}
+
+.button.small {
+  min-height: 36px;
+  padding: 4px 12px;
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row > .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Полоса доли или лимита. */
+.bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--raised);
+  overflow: hidden;
+}
+
+.bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--lime);
+}
+
+.bar.over > i {
+  background: var(--danger);
+}
+
+.share {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.share .row {
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+/* Переключатель «Расход / Доход». */
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border-radius: 15px;
+  background: var(--raised);
+}
+
+.segmented input {
+  position: absolute;
+  opacity: 0;
+}
+
+.segmented span {
+  display: block;
+  padding: 9px;
+  border-radius: 11px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.segmented input:checked + span {
+  background: var(--lime);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.segmented input:focus-visible + span {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+/* Нижняя панель разделов и кнопка добавления. */
+.tabs {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  height: calc(var(--tabs-height) + var(--safe-bottom));
+  padding: 8px 8px calc(8px + var(--safe-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.tab {
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--hint);
+  font-size: 13px;
+}
+
+.tab[aria-current="page"] {
+  background: var(--raised);
+  color: var(--lime);
+  font-weight: 600;
+}
+
+.fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--tabs-height) + var(--safe-bottom) + 16px);
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 30px;
+  line-height: 1;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Окно, выезжающее снизу. */
+.sheet {
+  width: 100%;
+  max-width: 640px;
+  max-height: 92dvh;
+  margin: auto auto 0;
+  padding: 20px 16px calc(20px + var(--safe-bottom));
+  border: 0;
+  border-radius: 26px 26px 0 0;
+  background: var(--card);
+  color: var(--text);
+  overflow-y: auto;
+}
+
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.sheet,
+.sheet form {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sheet[open],
+.sheet form {
+  display: flex;
+}
+
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(var(--tabs-height) + var(--safe-bottom) + 84px);
+  max-width: 608px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+[hidden] {
+  display: none !important;
+}

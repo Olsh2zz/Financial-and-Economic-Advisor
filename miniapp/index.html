@@ -1,0 +1,81 @@
+<!--
+  Файл: index.html
+  Назначение: страница мини-приложения Telegram XPay:
+  разметка экранов и окон. Содержимое экранов рисует js/app.js.
+-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a1304">
+  <title>XPay</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main id="view" class="view"></main>
+
+  <button id="add-button" class="fab" type="button" aria-label="Добавить операцию">+</button>
+
+  <nav class="tabs" aria-label="Разделы">
+    <button type="button" class="tab" data-view="operations">Операции</button>
+    <button type="button" class="tab" data-view="report">Отчёты</button>
+    <button type="button" class="tab" data-view="budget">Лимиты</button>
+    <button type="button" class="tab" data-view="categories">Категории</button>
+  </nav>
+
+  <dialog id="operation-dialog" class="sheet">
+    <form id="operation-form" method="dialog" novalidate>
+      <h2 id="operation-title">Новая операция</h2>
+
+      <div class="segmented" role="radiogroup" aria-label="Тип операции">
+        <label><input type="radio" name="kind" value="expense" checked><span>Расход</span></label>
+        <label><input type="radio" name="kind" value="income"><span>Доход</span></label>
+      </div>
+
+      <label class="field">
+        <span>Сумма, руб.</span>
+        <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00">
+      </label>
+
+      <label class="field">
+        <span>Категория</span>
+        <select name="category"></select>
+      </label>
+
+      <label class="field">
+        <span>Дата и время</span>
+        <input name="at" type="datetime-local">
+      </label>
+
+      <label class="field">
+        <span>Описание (необязательно)</span>
+        <input name="note" type="text" maxlength="200" autocomplete="off">
+      </label>
+
+      <p id="operation-error" class="error" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="submit" class="button primary">Сохранить</button>
+        <button type="button" class="button danger" id="operation-delete" hidden>Удалить</button>
+        <button type="button" class="button" id="operation-cancel">Отмена</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="export-dialog" class="sheet">
+    <h2 id="export-title">Экспорт</h2>
+    <textarea id="export-text" readonly rows="12" aria-labelledby="export-title"></textarea>
+    <div class="actions">
+      <button type="button" class="button primary" id="export-copy">Скопировать</button>
+      <button type="button" class="button" id="export-download">Скачать файл</button>
+      <button type="button" class="button" id="export-close">Закрыть</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
