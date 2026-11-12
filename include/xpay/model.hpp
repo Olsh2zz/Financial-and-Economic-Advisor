@@ -42,6 +42,8 @@ struct State {
     std::vector<Operation> operations;
 
     [[nodiscard]] const std::vector<std::string>& categories(Kind kind) const noexcept;
+    /// Есть ли категория с точно таким названием среди категорий типа kind.
+    [[nodiscard]] bool has_category(Kind kind, std::string_view name) const noexcept;
     [[nodiscard]] std::vector<std::string>& categories(Kind kind) noexcept;
 };
 

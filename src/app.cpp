@@ -22,19 +22,9 @@ namespace {
 // Метка порядка байтов: без неё Excel читает CSV в UTF-8 в другой кодировке.
 constexpr const char* kByteOrderMark = "\xEF\xBB\xBF";
 
-// Целое число из строки, в которой только цифры (не больше шести).
-std::optional<int> to_int(const std::string& text) {
-    if (text.empty() || text.size() > 6) {
-        return std::nullopt;
-    }
-    int value = 0;
-    for (const char symbol : text) {
-        if (symbol < '0' || symbol > '9') {
-            return std::nullopt;
-        }
-        value = value * 10 + (symbol - '0');
-    }
-    return value;
+// Номера пунктов меню и операций: не больше шести цифр.
+std::optional<int> to_int(const std::string& text) noexcept {
+    return parse_digits(text, 6);
 }
 
 std::string stamp_date(const std::string& stamp) {

@@ -23,7 +23,6 @@
 
 #include "xpay/budget.hpp"
 #include "xpay/datetime.hpp"
-#include "xpay/json.hpp"
 #include "xpay/ledger.hpp"
 #include "xpay/report.hpp"
 #include "xpay/storage.hpp"
@@ -87,18 +86,7 @@ std::string read_filter(const Json& request, Filter& filter) {
     return {};
 }
 
-Json to_json(const Operation& item) {
-    Json result = Json::object();
-    result.set("id", Json(item.id));
-    result.set("at", Json(item.at));
-    result.set("amount", Json(item.amount));
-    result.set("kind", Json(kind_code(item.kind)));
-    result.set("category", Json(item.category));
-    result.set("note", Json(item.note));
-    return result;
-}
-
-Json to_json(const Totals& sums) {
+Json totals_json(const Totals& sums) {
     Json result = Json::object();
     result.set("income", Json(sums.income));
     result.set("expense", Json(sums.expense));
@@ -106,7 +94,7 @@ Json to_json(const Totals& sums) {
     return result;
 }
 
-Json to_json(const std::optional<LimitStatus>& status) {
+Json limit_json(const std::optional<LimitStatus>& status) {
     if (!status) {
         return {};
     }
@@ -116,14 +104,6 @@ Json to_json(const std::optional<LimitStatus>& status) {
     result.set("left", Json(status->left));
     result.set("exceeded", Json(status->exceeded));
     return result;
-}
-
-Json to_json(const std::vector<std::string>& names) {
-    Json list = Json::array();
-    for (const std::string& name : names) {
-        list.push(Json(name));
-    }
-    return list;
 }
 
 // Ответ на добавление и правку: сама операция и состояние лимита её категории
@@ -136,7 +116,7 @@ std::string operation_response(const State& state, const Result<Operation>& resu
     Json response = success();
     response.set("operation", to_json(item));
     response.set("limit", item.kind == Kind::Expense
-        ? to_json(check_limit(state, item.category, std::string_view(item.at).substr(0, 7)))
+        ? limit_json(check_limit(state, item.category, std::string_view(item.at).substr(0, 7)))
         : Json());
     return response.dump();
 }
@@ -156,7 +136,7 @@ std::string read_draft(const Json& request, Draft& draft) {
     return {};
 }
 
-std::string handle_list(const State& state, const Json& request) {
+std::string handle_list(State& state, const Json& request) {
     Filter filter;
     if (const std::string error = read_filter(request, filter); !error.empty()) {
         return failure(error);
@@ -168,11 +148,11 @@ std::string handle_list(const State& state, const Json& request) {
     }
     Json response = success();
     response.set("operations", std::move(list));
-    response.set("totals", to_json(totals(operations)));
+    response.set("totals", totals_json(totals(operations)));
     return response.dump();
 }
 
-std::string handle_report(const State& state, const Json& request) {
+std::string handle_report(State& state, const Json& request) {
     Filter period;
     if (const std::string error = read_filter(request, period); !error.empty()) {
         return failure(error);
@@ -205,13 +185,13 @@ std::string handle_report(const State& state, const Json& request) {
         outlook.set("projections", std::move(projections));
     }
     Json response = success();
-    response.set("totals", to_json(totals(operations)));
+    response.set("totals", totals_json(totals(operations)));
     response.set("shares", std::move(shares));
     response.set("forecast", std::move(outlook));
     return response.dump();
 }
 
-std::string handle_export(const State& state, const Json& request) {
+std::string handle_export(State& state, const Json& request) {
     Filter period;
     if (const std::string error = read_filter(request, period); !error.empty()) {
         return failure(error);
@@ -226,7 +206,7 @@ std::string handle_export(const State& state, const Json& request) {
     return response.dump();
 }
 
-std::string handle_limits(const State& state, const Json& request) {
+std::string handle_limits(State& state, const Json& request) {
     const std::string month = text_field(request, "month");
     if (!is_valid_date(month + "-01")) {
         return failure("Месяц записывается в виде ГГГГ-ММ.");
@@ -236,7 +216,7 @@ std::string handle_limits(const State& state, const Json& request) {
         Json item = Json::object();
         item.set("category", Json(category));
         item.set("spent", Json(month_spent(state.operations, category, month)));
-        item.set("status", to_json(check_limit(state, category, month)));
+        item.set("status", limit_json(check_limit(state, category, month)));
         items.push(std::move(item));
     }
     Json response = success();
@@ -248,6 +228,104 @@ std::string status_response(const Status& status) {
     return status.ok() ? success().dump() : failure(status.error);
 }
 
+std::string handle_load(State& state, const Json& request) {
+    Result<State> loaded = deserialize(text_field(request, "data"));
+    if (!loaded.ok()) {
+        return failure(loaded.error);
+    }
+    state = std::move(*loaded.value);
+    return success().dump();
+}
+
+std::string handle_dump(State& state, const Json&) {
+    Json response = success();
+    response.set("data", Json(serialize(state)));
+    return response.dump();
+}
+
+std::string handle_state(State& state, const Json&) {
+    Json categories = Json::object();
+    categories.set("income", to_json(state.income_categories));
+    categories.set("expense", to_json(state.expense_categories));
+    Json response = success();
+    response.set("categories", std::move(categories));
+    response.set("count", Json(static_cast<long long>(state.operations.size())));
+    return response.dump();
+}
+
+std::string handle_add(State& state, const Json& request) {
+    Draft draft;
+    if (const std::string error = read_draft(request, draft); !error.empty()) {
+        return failure(error);
+    }
+    return operation_response(state, add_operation(state, draft));
+}
+
+std::string handle_update(State& state, const Json& request) {
+    Draft draft;
+    if (const std::string error = read_draft(request, draft); !error.empty()) {
+        return failure(error);
+    }
+    const std::optional<int> id = id_field(request);
+    if (!id) {
+        return failure("Операции с таким номером нет.");
+    }
+    return operation_response(state, update_operation(state, *id, draft));
+}
+
+std::string handle_remove(State& state, const Json& request) {
+    const std::optional<int> id = id_field(request);
+    return status_response(id ? remove_operation(state, *id) : Status{"Операции с таким номером нет."});
+}
+
+std::string handle_set_limit(State& state, const Json& request) {
+    const Result<Money> amount = parse_amount(text_field(request, "amount"));
+    if (!amount.ok()) {
+        return failure(amount.error);
+    }
+    return status_response(set_limit(state, text_field(request, "category"), *amount.value));
+}
+
+std::string handle_clear_limit(State& state, const Json& request) {
+    clear_limit(state, text_field(request, "category"));
+    return success().dump();
+}
+
+std::string handle_add_category(State& state, const Json& request) {
+    const std::optional<Kind> kind = kind_field(request);
+    return kind ? status_response(add_category(state, *kind, text_field(request, "name")))
+                : failure("Неизвестный тип категории.");
+}
+
+std::string handle_remove_category(State& state, const Json& request) {
+    const std::optional<Kind> kind = kind_field(request);
+    return kind ? status_response(remove_category(state, *kind, text_field(request, "name")))
+                : failure("Неизвестный тип категории.");
+}
+
+struct Command {
+    std::string_view name;
+    std::string (*handler)(State&, const Json&);
+};
+
+// Таблица команд: чтобы добавить команду, нужна одна функция и одна строка здесь.
+constexpr Command kCommands[] = {
+    {"load", handle_load},
+    {"dump", handle_dump},
+    {"state", handle_state},
+    {"list", handle_list},
+    {"add", handle_add},
+    {"update", handle_update},
+    {"remove", handle_remove},
+    {"report", handle_report},
+    {"export", handle_export},
+    {"limits", handle_limits},
+    {"setLimit", handle_set_limit},
+    {"clearLimit", handle_clear_limit},
+    {"addCategory", handle_add_category},
+    {"removeCategory", handle_remove_category},
+};
+
 }  // namespace
 
 std::string handle_request(State& state, std::string_view request_text) {
@@ -255,82 +333,13 @@ std::string handle_request(State& state, std::string_view request_text) {
     if (!parsed.ok() || parsed.value->as_object() == nullptr) {
         return failure("Запрос должен быть объектом JSON.");
     }
-    const Json& request = *parsed.value;
-    const std::string command = text_field(request, "cmd");
-
-    if (command == "load") {
-        Result<State> loaded = deserialize(text_field(request, "data"));
-        if (!loaded.ok()) {
-            return failure(loaded.error);
+    const std::string name = text_field(*parsed.value, "cmd");
+    for (const Command& command : kCommands) {
+        if (command.name == name) {
+            return command.handler(state, *parsed.value);
         }
-        state = std::move(*loaded.value);
-        return success().dump();
     }
-    if (command == "dump") {
-        Json response = success();
-        response.set("data", Json(serialize(state)));
-        return response.dump();
-    }
-    if (command == "state") {
-        Json categories = Json::object();
-        categories.set("income", to_json(state.income_categories));
-        categories.set("expense", to_json(state.expense_categories));
-        Json response = success();
-        response.set("categories", std::move(categories));
-        response.set("count", Json(static_cast<long long>(state.operations.size())));
-        return response.dump();
-    }
-    if (command == "list") {
-        return handle_list(state, request);
-    }
-    if (command == "add" || command == "update") {
-        Draft draft;
-        if (const std::string error = read_draft(request, draft); !error.empty()) {
-            return failure(error);
-        }
-        if (command == "add") {
-            return operation_response(state, add_operation(state, draft));
-        }
-        const std::optional<int> id = id_field(request);
-        if (!id) {
-            return failure("Операции с таким номером нет.");
-        }
-        return operation_response(state, update_operation(state, *id, draft));
-    }
-    if (command == "remove") {
-        const std::optional<int> id = id_field(request);
-        return status_response(id ? remove_operation(state, *id) : Status{"Операции с таким номером нет."});
-    }
-    if (command == "report") {
-        return handle_report(state, request);
-    }
-    if (command == "export") {
-        return handle_export(state, request);
-    }
-    if (command == "limits") {
-        return handle_limits(state, request);
-    }
-    if (command == "setLimit") {
-        const Result<Money> amount = parse_amount(text_field(request, "amount"));
-        if (!amount.ok()) {
-            return failure(amount.error);
-        }
-        return status_response(set_limit(state, text_field(request, "category"), *amount.value));
-    }
-    if (command == "clearLimit") {
-        clear_limit(state, text_field(request, "category"));
-        return success().dump();
-    }
-    if (command == "addCategory" || command == "removeCategory") {
-        const std::optional<Kind> kind = kind_field(request);
-        if (!kind) {
-            return failure("Неизвестный тип категории.");
-        }
-        const std::string name = text_field(request, "name");
-        return status_response(command == "addCategory" ? add_category(state, *kind, name)
-                                                        : remove_category(state, *kind, name));
-    }
-    return failure("Неизвестная команда «" + command + "».");
+    return failure("Неизвестная команда «" + name + "».");
 }
 
 }  // namespace xpay

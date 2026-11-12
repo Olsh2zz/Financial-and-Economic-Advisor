@@ -81,6 +81,7 @@ std::vector<Share> expense_shares(const std::vector<Operation>& operations) {
         }
     }
     std::vector<Share> shares;
+    shares.reserve(by_category.size());
     for (const auto& [category, amount] : by_category) {
         // Прибавка половины делителя даёт округление до ближайшего целого.
         shares.push_back({category, amount, static_cast<int>((amount * 100 + total / 2) / total)});

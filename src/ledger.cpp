@@ -12,10 +12,6 @@ namespace xpay {
 
 namespace {
 
-bool contains(const std::vector<std::string>& list, std::string_view name) {
-    return std::find(list.begin(), list.end(), name) != list.end();
-}
-
 // Проверяет поля и возвращает их в виде операции с номером id.
 Result<Operation> checked(const State& state, int id, const Draft& draft) {
     using R = Result<Operation>;
@@ -25,7 +21,7 @@ Result<Operation> checked(const State& state, int id, const Draft& draft) {
     if (draft.amount <= 0 || draft.amount > kMaxAmount) {
         return R::failure("Сумма должна быть больше нуля и не больше 999 999 999,99 руб.");
     }
-    if (!contains(state.categories(draft.kind), draft.category)) {
+    if (!state.has_category(draft.kind, draft.category)) {
         return R::failure("Выберите категорию из списка.");
     }
     std::string note = trim(draft.note);

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "check.hpp"
+#include "suites.hpp"
 #include "xpay/ledger.hpp"
 
 using namespace xpay;

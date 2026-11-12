@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -19,6 +20,11 @@ std::size_t utf8_length(std::string_view text) noexcept;
 
 /// Нижний регистр для латиницы и русских букв. Остальные символы не меняются.
 std::string to_lower(std::string_view text);
+
+/// Целое неотрицательное число из строки, в которой только цифры.
+/// Пусто, если строка пустая, длиннее max_digits или содержит другой символ.
+/// max_digits не больше 9, чтобы результат поместился в int.
+std::optional<int> parse_digits(std::string_view text, std::size_t max_digits) noexcept;
 
 /// Дополняет строку пробелами справа или слева до ширины width в символах.
 std::string pad_right(std::string_view text, std::size_t width);

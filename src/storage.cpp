@@ -10,31 +10,11 @@
 #include <set>
 
 #include "xpay/datetime.hpp"
-#include "xpay/json.hpp"
 #include "xpay/text.hpp"
 
 namespace xpay {
 
 namespace {
-
-Json to_json(const std::vector<std::string>& names) {
-    Json list = Json::array();
-    for (const std::string& name : names) {
-        list.push(Json(name));
-    }
-    return list;
-}
-
-Json to_json(const Operation& item) {
-    Json result = Json::object();
-    result.set("id", Json(item.id));
-    result.set("at", Json(item.at));
-    result.set("amount", Json(item.amount));
-    result.set("kind", Json(kind_code(item.kind)));
-    result.set("category", Json(item.category));
-    result.set("note", Json(item.note));
-    return result;
-}
 
 // Список категорий: непустые строки без повторов.
 bool read_categories(const Json* json, std::vector<std::string>& out) {
@@ -84,11 +64,76 @@ bool read_operation(const Json& json, const State& state, Operation& out) {
     out.kind = *kind_text == "income" ? Kind::Income : Kind::Expense;
     out.category = *category->as_string();
     out.note = *note->as_string();
-    const std::vector<std::string>& allowed = state.categories(out.kind);
-    return std::find(allowed.begin(), allowed.end(), out.category) != allowed.end();
+    return state.has_category(out.kind, out.category);
+}
+
+// Лимиты: только для существующих категорий расходов, суммы больше нуля.
+bool read_limits(const Json* json, State& state) {
+    const Json::Object* members = json != nullptr ? json->as_object() : nullptr;
+    if (members == nullptr) {
+        return false;
+    }
+    for (const Json::Member& member : *members) {
+        if (!state.has_category(Kind::Expense, member.key) || !is_amount(member.value.as_int())) {
+            return false;
+        }
+        state.limits[member.key] = *member.value.as_int();
+    }
+    return true;
+}
+
+// Список операций и счётчик номеров. Возвращает текст ошибки или пустую строку.
+std::string read_operations(const Json& root, State& state) {
+    const Json* operations = root.find("operations");
+    const Json::Array* items = operations != nullptr ? operations->as_array() : nullptr;
+    if (items == nullptr) {
+        return "В данных повреждён список операций.";
+    }
+    std::set<int> ids;
+    int max_id = 0;
+    for (const Json& item : *items) {
+        Operation operation;
+        if (!read_operation(item, state, operation)) {
+            return "В данных повреждён список операций.";
+        }
+        if (!ids.insert(operation.id).second) {
+            return "В данных повторяются номера операций.";
+        }
+        max_id = std::max(max_id, operation.id);
+        state.operations.push_back(std::move(operation));
+    }
+
+    // Следующий номер должен быть больше всех выданных, иначе новая операция
+    // получит номер существующей.
+    const Json* next_id = root.find("nextId");
+    const auto next_value = next_id != nullptr ? next_id->as_int() : std::nullopt;
+    if (!next_value || *next_value <= max_id || *next_value >= std::numeric_limits<int>::max()) {
+        return "В данных повреждён счётчик номеров операций.";
+    }
+    state.next_id = static_cast<int>(*next_value);
+    return {};
 }
 
 }  // namespace
+
+Json to_json(const std::vector<std::string>& names) {
+    Json list = Json::array();
+    for (const std::string& name : names) {
+        list.push(Json(name));
+    }
+    return list;
+}
+
+Json to_json(const Operation& item) {
+    Json result = Json::object();
+    result.set("id", Json(item.id));
+    result.set("at", Json(item.at));
+    result.set("amount", Json(item.amount));
+    result.set("kind", Json(kind_code(item.kind)));
+    result.set("category", Json(item.category));
+    result.set("note", Json(item.note));
+    return result;
+}
 
 std::string serialize(const State& state, bool pretty) {
     Json categories = Json::object();
@@ -133,47 +178,12 @@ Result<State> deserialize(std::string_view text) {
         return R::failure("В данных повреждён список категорий.");
     }
 
-    const Json* limits = root.find("limits");
-    const Json::Object* limit_members = limits != nullptr ? limits->as_object() : nullptr;
-    if (limit_members == nullptr) {
+    if (!read_limits(root.find("limits"), state)) {
         return R::failure("В данных повреждены лимиты.");
     }
-    for (const Json::Member& member : *limit_members) {
-        const std::vector<std::string>& allowed = state.expense_categories;
-        if (std::find(allowed.begin(), allowed.end(), member.key) == allowed.end()
-            || !is_amount(member.value.as_int())) {
-            return R::failure("В данных повреждены лимиты.");
-        }
-        state.limits[member.key] = *member.value.as_int();
+    if (std::string error = read_operations(root, state); !error.empty()) {
+        return R::failure(std::move(error));
     }
-
-    const Json* operations = root.find("operations");
-    const Json::Array* items = operations != nullptr ? operations->as_array() : nullptr;
-    if (items == nullptr) {
-        return R::failure("В данных повреждён список операций.");
-    }
-    std::set<int> ids;
-    int max_id = 0;
-    for (const Json& item : *items) {
-        Operation operation;
-        if (!read_operation(item, state, operation)) {
-            return R::failure("В данных повреждён список операций.");
-        }
-        if (!ids.insert(operation.id).second) {
-            return R::failure("В данных повторяются номера операций.");
-        }
-        max_id = std::max(max_id, operation.id);
-        state.operations.push_back(std::move(operation));
-    }
-
-    // Следующий номер должен быть больше всех выданных, иначе новая операция
-    // получит номер существующей.
-    const Json* next_id = root.find("nextId");
-    const auto next_value = next_id != nullptr ? next_id->as_int() : std::nullopt;
-    if (!next_value || *next_value <= max_id || *next_value >= std::numeric_limits<int>::max()) {
-        return R::failure("В данных повреждён счётчик номеров операций.");
-    }
-    state.next_id = static_cast<int>(*next_value);
     return R::success(std::move(state));
 }
 

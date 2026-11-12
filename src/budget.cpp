@@ -17,8 +17,7 @@ constexpr int kHorizons[] = {3, 6, 12};
 }  // namespace
 
 Status set_limit(State& state, const std::string& category, Money amount) {
-    const std::vector<std::string>& list = state.expense_categories;
-    if (std::find(list.begin(), list.end(), category) == list.end()) {
+    if (!state.has_category(Kind::Expense, category)) {
         return {"Лимит задаётся только для категории расходов."};
     }
     if (amount <= 0 || amount > kMaxAmount) {

@@ -103,7 +103,8 @@ test('состояние сохраняется по частям и читае�
   for (let day = 1; day <= 28; day += 1) {
     for (let hour = 8; hour < 14; hour += 1) {
       const at = `2026-10-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:00`;
-      core.call('add', { amount: String(day + hour), at, kind: 'expense', category: 'Кофе', note: 'латте ☕ "двойной"' });
+      const note = 'латте ☕ "двойной"';
+      core.call('add', { amount: String(day + hour), at, kind: 'expense', category: 'Кофе', note });
     }
   }
   const { data } = core.call('dump');

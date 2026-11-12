@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "check.hpp"
+#include "suites.hpp"
 #include "xpay/budget.hpp"
 #include "xpay/report.hpp"
 

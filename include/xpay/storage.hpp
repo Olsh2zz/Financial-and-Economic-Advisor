@@ -6,13 +6,20 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "xpay/json.hpp"
 #include "xpay/model.hpp"
 #include "xpay/result.hpp"
 
 namespace xpay {
 
 inline constexpr int kFormatVersion = 1;
+
+/// Операция и список названий в виде JSON. Тот же вид у них в файле данных
+/// и в ответах ядра мини-приложению.
+Json to_json(const Operation& item);
+Json to_json(const std::vector<std::string>& names);
 
 /// Записывает состояние в JSON. pretty включает отступы для чтения глазами.
 std::string serialize(const State& state, bool pretty = false);

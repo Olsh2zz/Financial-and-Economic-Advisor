@@ -4,6 +4,7 @@
 #include <string>
 
 #include "check.hpp"
+#include "suites.hpp"
 #include "xpay/datetime.hpp"
 #include "xpay/money.hpp"
 #include "xpay/text.hpp"

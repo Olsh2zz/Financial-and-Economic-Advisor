@@ -27,6 +27,8 @@ extern "C" {
 
 /// Выполняет команду. request указывает на строку JSON в UTF-8 с нулём в конце.
 /// Возвращает указатель на строку ответа в том же виде.
+const char* xpay_call(const char* request);
+
 const char* xpay_call(const char* request) {
     response() = xpay::handle_request(state(), request);
     return response().c_str();

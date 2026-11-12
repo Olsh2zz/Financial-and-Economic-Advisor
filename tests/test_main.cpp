@@ -5,15 +5,7 @@
 #include <iostream>
 
 #include "check.hpp"
-
-void test_money();
-void test_datetime();
-void test_ledger();
-void test_report();
-void test_budget();
-void test_storage();
-void test_api();
-void test_app();
+#include "suites.hpp"
 
 int main() {
     test_money();

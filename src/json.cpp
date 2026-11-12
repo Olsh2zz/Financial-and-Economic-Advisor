@@ -90,7 +90,7 @@ void write_string(std::string& out, const std::string& text) {
 void write_break(std::string& out, int indent, int level) {
     if (indent > 0) {
         out.push_back('\n');
-        out.append(static_cast<std::size_t>(indent * level), ' ');
+        out.append(static_cast<std::size_t>(indent) * static_cast<std::size_t>(level), ' ');
     }
 }
 
@@ -301,7 +301,8 @@ private:
             fail("ожидалась цифра");
             return {};
         }
-        if (position_ < text_.size() && (text_[position_] == '.' || text_[position_] == 'e' || text_[position_] == 'E')) {
+        const char next = position_ < text_.size() ? text_[position_] : '\0';
+        if (next == '.' || next == 'e' || next == 'E') {
             fail("дробные числа не поддерживаются");
             return {};
         }

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "check.hpp"
+#include "suites.hpp"
 #include "xpay/api.hpp"
 #include "xpay/budget.hpp"
 #include "xpay/json.hpp"
@@ -156,8 +157,12 @@ void test_api() {
     CHECK(contains(call(R"({"cmd":"взлететь"})"), "Неизвестная команда"));
 
     // Добавление: сумма идёт текстом, как её ввёл пользователь.
-    CHECK_EQ(call(R"({"cmd":"add","amount":"1 500,50","at":"2026-11-12T09:30","kind":"expense","category":"Еда","note":"обед"})"),
-        std::string(R"({"ok":true,"operation":{"id":1,"at":"2026-11-12T09:30","amount":150050,"kind":"expense","category":"Еда","note":"обед"},"limit":null})"));
+    CHECK_EQ(call(
+        R"({"cmd":"add","amount":"1 500,50","at":"2026-11-12T09:30","kind":"expense",)"
+        R"("category":"Еда","note":"обед"})"),
+        std::string(
+            R"({"ok":true,"operation":{"id":1,"at":"2026-11-12T09:30","amount":150050,)"
+            R"("kind":"expense","category":"Еда","note":"обед"},"limit":null})"));
     CHECK(contains(call(R"({"cmd":"add","amount":"abc","at":"2026-11-12T09:30","kind":"expense","category":"Еда"})"),
         "Сумма пишется цифрами"));
     CHECK(contains(call(R"({"cmd":"add","amount":"5","at":"2026-11-12T09:30","kind":"","category":"Еда"})"),
@@ -168,24 +173,36 @@ void test_api() {
 
     // Лимит и предупреждение о превышении в ответе на добавление.
     CHECK(contains(call(R"({"cmd":"setLimit","category":"Еда","amount":"2000"})"), R"("ok":true)"));
-    CHECK(contains(call(R"({"cmd":"setLimit","category":"Зарплата","amount":"2000"})"), "только для категории расходов"));
+    CHECK(contains(call(
+        R"({"cmd":"setLimit","category":"Зарплата","amount":"2000"})"), "только для категории расходов"));
     CHECK(contains(call(R"({"cmd":"setLimit","category":"Еда","amount":"ноль"})"), R"("ok":false)"));
-    CHECK(contains(call(R"({"cmd":"add","amount":"600","at":"2026-11-13T10:00","kind":"expense","category":"Еда","note":""})"),
+    CHECK(contains(call(
+        R"({"cmd":"add","amount":"600","at":"2026-11-13T10:00","kind":"expense",)"
+        R"("category":"Еда","note":""})"),
         R"("limit":{"limit":200000,"spent":210050,"left":-10050,"exceeded":true})"));
-    CHECK(contains(call(R"({"cmd":"add","amount":"70000","at":"2026-11-01T10:00","kind":"income","category":"Зарплата","note":""})"),
+    CHECK(contains(call(
+        R"({"cmd":"add","amount":"70000","at":"2026-11-01T10:00","kind":"income",)"
+        R"("category":"Зарплата","note":""})"),
         R"("limit":null)"));
 
     // Правка и удаление.
-    CHECK(contains(call(R"({"cmd":"update","id":2,"amount":"100","at":"2026-11-13T10:00","kind":"expense","category":"Еда","note":"кофе"})"),
+    CHECK(contains(call(
+        R"({"cmd":"update","id":2,"amount":"100","at":"2026-11-13T10:00","kind":"expense",)"
+        R"("category":"Еда","note":"кофе"})"),
         R"("limit":{"limit":200000,"spent":160050,"left":39950,"exceeded":false})"));
-    CHECK(contains(call(R"({"cmd":"update","id":99,"amount":"100","at":"2026-11-13T10:00","kind":"expense","category":"Еда"})"),
+    CHECK(contains(call(
+        R"({"cmd":"update","id":99,"amount":"100","at":"2026-11-13T10:00","kind":"expense",)"
+        R"("category":"Еда"})"),
         "Операции с таким номером нет"));
     CHECK(contains(call(R"({"cmd":"remove","id":"2"})"), R"("ok":false)"));
     CHECK(contains(call(R"({"cmd":"remove","id":99})"), R"("ok":false)"));
 
     // Список с фильтром и итогами.
     CHECK_EQ(call(R"({"cmd":"list","kind":"expense","from":"2026-11-13"})"),
-        std::string(R"({"ok":true,"operations":[{"id":2,"at":"2026-11-13T10:00","amount":10000,"kind":"expense","category":"Еда","note":"кофе"}],"totals":{"income":0,"expense":10000,"balance":-10000}})"));
+        std::string(
+            R"({"ok":true,"operations":[{"id":2,"at":"2026-11-13T10:00","amount":10000,)"
+            R"("kind":"expense","category":"Еда","note":"кофе"}],"totals":{"income":0,)"
+            R"("expense":10000,"balance":-10000}})"));
     CHECK(contains(call(R"({"cmd":"list"})"), R"("totals":{"income":7000000,"expense":160050,"balance":6839950})"));
     CHECK(contains(call(R"({"cmd":"list","from":"13.11.2026"})"), "Дата фильтра записана неверно"));
     CHECK(contains(call(R"({"cmd":"list","from":"2026-11-13","to":"2026-11-01"})"), "Начало периода позже"));
@@ -193,14 +210,17 @@ void test_api() {
     // Отчёт, экспорт, лимиты.
     const std::string report = call(R"({"cmd":"report"})");
     CHECK(contains(report, R"("shares":[{"category":"Еда","amount":160050,"percent":100}])"));
-    CHECK(contains(report, R"("forecast":{"months":1,"averageIncome":7000000,"averageExpense":160050,"potential":6839950,)"));
+    CHECK(contains(report,
+        R"("forecast":{"months":1,"averageIncome":7000000,"averageExpense":160050,)"
+        R"("potential":6839950,)"));
     CHECK(contains(call(R"({"cmd":"report","to":"2020-01-01"})"), R"("shares":[],"forecast":{"months":1)"));
     CHECK(contains(call(R"({"cmd":"export","format":"txt"})"), "Еда: [##################] 100% (1600,50 руб.)"));
     CHECK(contains(call(R"({"cmd":"export","format":"csv"})"), R"(Дата;Время;Тип;Категория;Сумма;Описание\r\n)"));
     CHECK(contains(call(R"({"cmd":"export","format":"pdf"})"), R"("ok":false)"));
     CHECK(contains(call(R"({"cmd":"limits","month":"2026-11"})"),
         R"({"category":"Еда","spent":160050,"status":{"limit":200000,"spent":160050,"left":39950,"exceeded":false}})"));
-    CHECK(contains(call(R"({"cmd":"limits","month":"2026-11"})"), R"({"category":"Транспорт","spent":0,"status":null})"));
+    CHECK(contains(call(R"({"cmd":"limits","month":"2026-11"})"),
+        R"({"category":"Транспорт","spent":0,"status":null})"));
     CHECK(contains(call(R"({"cmd":"limits","month":"ноябрь"})"), R"("ok":false)"));
     CHECK(contains(call(R"({"cmd":"clearLimit","category":"Еда"})"), R"("ok":true)"));
     CHECK(state.limits.empty());
@@ -211,7 +231,8 @@ void test_api() {
     CHECK(contains(call(R"({"cmd":"removeCategory","kind":"expense","name":"Еда"})"), "есть операции"));
     CHECK(contains(call(R"({"cmd":"removeCategory","kind":"expense","name":"Кофе"})"), R"("ok":true)"));
     CHECK(contains(call(R"({"cmd":"addCategory","kind":"","name":"Кофе"})"), R"("ok":false)"));
-    CHECK(contains(call(R"({"cmd":"state"})"), R"("expense":["Еда","Транспорт","Жильё","Развлечения","Здоровье"]},"count":3)"));
+    CHECK(contains(call(R"({"cmd":"state"})"),
+        R"("expense":["Еда","Транспорт","Жильё","Развлечения","Здоровье"]},"count":3)"));
 
     // Выгрузка и загрузка: тот же текст, что пишет консольная программа.
     const std::string dumped = call(R"({"cmd":"dump"})");

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "check.hpp"
+#include "suites.hpp"
 #include "xpay/app.hpp"
 #include "xpay/budget.hpp"
 

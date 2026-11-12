@@ -70,6 +70,20 @@ std::string to_lower(std::string_view text) {
     return result;
 }
 
+std::optional<int> parse_digits(std::string_view text, std::size_t max_digits) noexcept {
+    if (text.empty() || text.size() > max_digits) {
+        return std::nullopt;
+    }
+    int value = 0;
+    for (const char symbol : text) {
+        if (symbol < '0' || symbol > '9') {
+            return std::nullopt;
+        }
+        value = value * 10 + (symbol - '0');
+    }
+    return value;
+}
+
 std::string pad_right(std::string_view text, std::size_t width) {
     std::string result(text);
     const std::size_t length = utf8_length(text);

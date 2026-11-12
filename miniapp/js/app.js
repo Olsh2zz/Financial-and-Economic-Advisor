@@ -177,6 +177,48 @@ function operationRow(operation) {
       el('span', { className: 'note' }, operation.at.slice(11))));
 }
 
+// Карточка фильтра ленты операций: период, категория, тип.
+function filterCard(categories, filtered, setFilter) {
+  return el('section', { className: 'card filters' },
+    dateField('С даты', listFilter.from, (from) => setFilter({ from })),
+    dateField('По дату', listFilter.to, (to) => setFilter({ to })),
+    selectField('Категория', listFilter.category,
+      [['', 'Все'], ...allCategories(categories).map((name) => [name, name])],
+      (category) => setFilter({ category })),
+    selectField('Тип', listFilter.kind,
+      [['', 'Все'], [KIND_INCOME, 'Доходы'], [KIND_EXPENSE, 'Расходы']],
+      (kind) => setFilter({ kind })),
+    filtered ? el('button', {
+      type: 'button',
+      className: 'button small wide',
+      onclick: () => setFilter({ from: '', to: '', category: '', kind: '' }),
+    }, 'Сбросить фильтр') : null);
+}
+
+// Лента операций по дням или пояснение, почему она пуста.
+function operationFeed(listed, totalCount) {
+  if (!listed.ok) {
+    return [el('p', { className: 'error empty' }, listed.error)];
+  }
+  if (totalCount === 0) {
+    return [el('p', { className: 'hint empty' }, 'Операций пока нет. Первую можно добавить кнопкой «+».')];
+  }
+  if (listed.operations.length === 0) {
+    return [el('p', { className: 'hint empty' }, 'Под этот фильтр не подходит ни одна операция.')];
+  }
+  const feed = [];
+  let lastDay = '';
+  for (const operation of listed.operations) {
+    const day = operation.at.slice(0, 10);
+    if (day !== lastDay) {
+      feed.push(el('h3', {}, dayTitle(day)));
+      lastDay = day;
+    }
+    feed.push(operationRow(operation));
+  }
+  return feed;
+}
+
 function renderOperations() {
   const setFilter = (patch) => {
     listFilter = { ...listFilter, ...patch };
@@ -186,7 +228,6 @@ function renderOperations() {
   const info = core.call('state');
   // Ядро отклоняет фильтр, в котором начало периода позже конца.
   const listed = core.call('list', listFilter);
-  const operations = listed.ok ? listed.operations : [];
 
   const action = (name, label, onclick) => el('button', { type: 'button', className: 'action', onclick },
     icon(name), el('span', {}, label));
@@ -211,37 +252,7 @@ function renderOperations() {
     },
   }, icon('filter'), filtered ? 'Фильтр включён' : 'Фильтр');
 
-  const filters = !filterOpen ? null : el('section', { className: 'card filters' },
-    dateField('С даты', listFilter.from, (from) => setFilter({ from })),
-    dateField('По дату', listFilter.to, (to) => setFilter({ to })),
-    selectField('Категория', listFilter.category,
-      [['', 'Все'], ...allCategories(info.categories).map((name) => [name, name])],
-      (category) => setFilter({ category })),
-    selectField('Тип', listFilter.kind,
-      [['', 'Все'], [KIND_INCOME, 'Доходы'], [KIND_EXPENSE, 'Расходы']],
-      (kind) => setFilter({ kind })),
-    filtered ? el('button', {
-      type: 'button', className: 'button small wide',
-      onclick: () => setFilter({ from: '', to: '', category: '', kind: '' }),
-    }, 'Сбросить фильтр') : null);
-
-  const list = [];
-  if (!listed.ok) {
-    list.push(el('p', { className: 'error empty' }, listed.error));
-  } else if (info.count === 0) {
-    list.push(el('p', { className: 'hint empty' }, 'Операций пока нет. Первую можно добавить кнопкой «+».'));
-  } else if (operations.length === 0) {
-    list.push(el('p', { className: 'hint empty' }, 'Под этот фильтр не подходит ни одна операция.'));
-  }
-  let lastDay = '';
-  for (const operation of operations) {
-    const day = operation.at.slice(0, 10);
-    if (day !== lastDay) {
-      list.push(el('h3', {}, dayTitle(day)));
-      lastDay = day;
-    }
-    list.push(operationRow(operation));
-  }
+  const filters = filterOpen ? filterCard(info.categories, filtered, setFilter) : null;
 
   view.replaceChildren(
     el('header', { className: 'top' },
@@ -252,10 +263,30 @@ function renderOperations() {
     hero,
     el('div', { className: 'row section-head' }, el('h2', { className: 'grow' }, 'Операции'), filterButton),
     ...(filters === null ? [] : [filters]),
-    el('section', { className: 'feed' }, ...list));
+    el('section', { className: 'feed' }, ...operationFeed(listed, info.count)));
 }
 
 // Экран «Отчёты»: статистика за период, расходы по категориям, прогноз, экспорт.
+
+// Карточка прогноза. outlook приходит из ядра; null означает, что операций ещё нет.
+function forecastCard(outlook) {
+  const line = (title, amount) => el('div', { className: 'row' },
+    el('span', { className: 'grow' }, title),
+    el('span', { className: 'amount' }, formatRubles(amount)));
+  const body = outlook === null
+    ? [el('p', { className: 'hint' }, 'Прогноз появится после первой операции.')]
+    : [
+      el('p', { className: 'hint' }, `Средние за ${outlook.months} мес. истории`),
+      line('Доход в месяц', outlook.averageIncome),
+      line('Расход в месяц', outlook.averageExpense),
+      line('Можно откладывать в месяц', outlook.potential),
+      ...outlook.projections.map((item) => line(`Накопится за ${item.months} мес.`, item.amount)),
+      outlook.potential < 0
+        ? el('p', { className: 'error' }, 'Расходы в среднем больше доходов, откладывать не из чего.')
+        : null,
+    ];
+  return el('section', { className: 'card' }, el('h3', {}, 'Прогноз накоплений'), ...body);
+}
 
 function renderReport() {
   const setPeriod = (patch) => {
@@ -276,25 +307,6 @@ function renderReport() {
           el('span', {}, share.category),
           el('span', { className: 'amount' }, `${share.percent}% (${formatRubles(share.amount)})`)),
         el('div', { className: 'bar' }, el('i', { style: `width: ${share.percent}%` }))))));
-
-  const outlook = report.ok ? report.forecast : null;
-  const line = (title, amount) => el('div', { className: 'row' },
-    el('span', { className: 'grow' }, title),
-    el('span', { className: 'amount' }, formatRubles(amount)));
-  const forecastCard = el('section', { className: 'card' },
-    el('h3', {}, 'Прогноз накоплений'),
-    ...(outlook === null
-      ? [el('p', { className: 'hint' }, 'Прогноз появится после первой операции.')]
-      : [
-        el('p', { className: 'hint' }, `Средние за ${outlook.months} мес. истории`),
-        line('Доход в месяц', outlook.averageIncome),
-        line('Расход в месяц', outlook.averageExpense),
-        line('Можно откладывать в месяц', outlook.potential),
-        ...outlook.projections.map((item) => line(`Накопится за ${item.months} мес.`, item.amount)),
-        outlook.potential < 0
-          ? el('p', { className: 'error' }, 'Расходы в среднем больше доходов, откладывать не из чего.')
-          : null,
-      ]));
 
   const exportButton = (title, format, type) => el('button', {
     type: 'button',
@@ -322,7 +334,7 @@ function renderReport() {
       dateField('С даты', reportPeriod.from, (from) => setPeriod({ from })),
       dateField('По дату', reportPeriod.to, (to) => setPeriod({ to }))),
     sharesCard,
-    forecastCard,
+    forecastCard(report.ok ? report.forecast : null),
     exportCard);
 }
 
@@ -363,9 +375,9 @@ function renderBudget() {
       const percent = Math.min(100, Math.round((status.spent * 100) / status.limit));
       progress = [
         el('div', { className: `bar${status.exceeded ? ' over' : ''}` }, el('i', { style: `width: ${percent}%` })),
-        el('p', { className: status.exceeded ? 'error' : 'hint' }, status.exceeded
-          ? `Потрачено ${formatRubles(status.spent)} из ${formatRubles(status.limit)}, превышение ${formatRubles(-status.left)}`
-          : `Потрачено ${formatRubles(status.spent)} из ${formatRubles(status.limit)}, осталось ${formatRubles(status.left)}`),
+        el('p', { className: status.exceeded ? 'error' : 'hint' },
+          `Потрачено ${formatRubles(status.spent)} из ${formatRubles(status.limit)}, `
+          + (status.exceeded ? `превышение ${formatRubles(-status.left)}` : `осталось ${formatRubles(status.left)}`)),
       ];
     }
     return el('section', { className: 'card' }, el('strong', {}, category), ...progress, form, error);

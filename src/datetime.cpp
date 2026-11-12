@@ -15,20 +15,9 @@ namespace {
 
 constexpr int kMonthsInYear = 12;
 
-// Число из строки, в которой только цифры. Пусто, если есть другой символ.
+// В дате и времени нет чисел длиннее четырёх цифр (год).
 std::optional<int> to_int(std::string_view digits) noexcept {
-    // Ограничение длины защищает от переполнения int.
-    if (digits.empty() || digits.size() > 4) {
-        return std::nullopt;
-    }
-    int value = 0;
-    for (const char symbol : digits) {
-        if (symbol < '0' || symbol > '9') {
-            return std::nullopt;
-        }
-        value = value * 10 + (symbol - '0');
-    }
-    return value;
+    return parse_digits(digits, 4);
 }
 
 bool is_leap(int year) noexcept {
