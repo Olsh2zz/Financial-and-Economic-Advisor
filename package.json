@@ -5,6 +5,6 @@
   "description": "XPay: мини-приложение Telegram для учёта личных финансов",
   "type": "module",
   "scripts": {
-    "test": "node --test \"tests/*.test.js\""
+    "test": "node --test \"tests/js/*.test.js\""
   }
 }

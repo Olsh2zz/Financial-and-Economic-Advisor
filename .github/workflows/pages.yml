@@ -1,14 +1,13 @@
 # Файл: pages.yml
-# Назначение: выкладывает папку miniapp на GitHub Pages после каждого
-# изменения в main. Telegram открывает мини-приложение только по HTTPS,
-# и Pages даёт такой адрес бесплатно.
+# Назначение: при каждом изменении в main собирает программу на C++, запускает
+# тесты и выкладывает папку miniapp на GitHub Pages. Telegram открывает
+# мини-приложение только по HTTPS, и Pages даёт такой адрес бесплатно.
 
-name: Публикация мини-приложения
+name: Тесты и публикация мини-приложения
 
 on:
   push:
     branches: [main]
-    paths: ['miniapp/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -25,10 +24,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Сборка и тесты C++
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          ctest --test-dir build --output-on-failure
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
+      - name: Тесты мини-приложения
+        run: npm test
 
   deploy:
     needs: test

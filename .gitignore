@@ -1,6 +1,24 @@
 # Файл: .gitignore
 # Назначение: файлы, которые не должны попадать в репозиторий.
 
+# Сборка
+build/
+out/
+.vs/
+CMakeSettings.json
+/xpay
+/xpay_tests
+*.exe
+*.obj
+*.o
+
+# Данные и отчёты, которые создаёт программа
+finance.json
+finance.json.tmp
+report.txt
+report.csv
+
+# Окружение
 node_modules/
 .DS_Store
 .vscode/

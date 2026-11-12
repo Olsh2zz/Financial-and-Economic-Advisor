@@ -1,18 +1,15 @@
 // Файл: app.js
-// Назначение: интерфейс мини-приложения XPay: рисует экраны, читает ввод и вызывает
-// расчёты из папки core. Самих расчётов здесь нет.
+// Назначение: интерфейс мини-приложения XPay: рисует экраны, читает ввод
+// и передаёт команды ядру. Ядро написано на C++ и собрано в WebAssembly,
+// расчётов и проверок ввода в этом файле нет.
 
-import { checkLimit, clearLimit, forecast, setLimit } from './core/budget.js';
-import {
-  addCategory, addOperation, filterOperations, removeCategory, removeOperation, updateOperation,
-} from './core/ledger.js';
-import { formatAmount, formatPlain, formatRubles, parseAmount } from './core/money.js';
-import { buildCsv, buildTextReport, expenseShares, totals } from './core/report.js';
-import {
-  KIND_EXPENSE, KIND_INCOME, KIND_TITLES, createDefaultState, deserialize, serialize, toStamp,
-} from './core/state.js';
+import { loadEngine } from './core/engine.js';
+import { formatAmount, formatPlain, formatRubles, toStamp } from './core/format.js';
 import { loadText, saveText } from './core/storage.js';
 import * as telegram from './platform/telegram.js';
+
+const KIND_INCOME = 'income';
+const KIND_EXPENSE = 'expense';
 
 const APP_NAME = 'XPay';
 
@@ -27,7 +24,8 @@ const BYTE_ORDER_MARK = '﻿';
 const view = document.getElementById('view');
 const toast = document.getElementById('toast');
 
-let state = createDefaultState();
+// Ядро: объект с методом call(cmd, args). Появляется после загрузки модуля.
+let core = null;
 let currentView = 'operations';
 let listFilter = { from: '', to: '', category: '', kind: '' };
 let reportPeriod = { from: '', to: '' };
@@ -70,21 +68,21 @@ function save() {
   if (!canSave) {
     return;
   }
-  const text = serialize(state);
+  const text = core.call('dump').data;
   saveQueue = saveQueue
     .then(() => saveText(telegram.store, text))
     .catch((error) => showToast(`Не удалось сохранить данные: ${error.message}`));
 }
 
-// Применяет результат функции из core: при успехе сохраняет и перерисовывает.
-function commit(result) {
-  if (!result.ok) {
-    return false;
+// Отправляет ядру команду, которая меняет данные. При успехе сохраняет
+// и перерисовывает экран. Возвращает ответ ядра.
+function change(cmd, args) {
+  const response = core.call(cmd, args);
+  if (response.ok) {
+    save();
+    render();
   }
-  state = result.state;
-  save();
-  render();
-  return true;
+  return response;
 }
 
 // Значки нарисованы линиями в сетке 24 на 24. Строки заданы здесь же и не
@@ -116,19 +114,20 @@ function bigAmount(kopecks) {
   return el('p', { className: 'balance' }, rubles, el('small', {}, `,${rest} ₽`));
 }
 
-// Светлая карточка с балансом, доходами и расходами по списку операций.
-function heroCard(title, operations, ...extra) {
-  const { income, expense, balance } = totals(operations);
+// Светлая карточка с балансом, доходами и расходами. sums приходит из ядра.
+function heroCard(title, sums, ...extra) {
   const chip = (name, label, amount) => el('span', { className: 'chip' },
     icon(name), `${label} ${formatAmount(amount)}`);
   return el('section', { className: 'hero' },
     el('p', { className: 'hero-title' }, title),
-    bigAmount(balance),
+    bigAmount(sums.balance),
     el('div', { className: 'chips' },
-      chip('income', 'Доходы', income),
-      chip('expense', 'Расходы', expense)),
+      chip('income', 'Доходы', sums.income),
+      chip('expense', 'Расходы', sums.expense)),
     ...extra);
 }
+
+const NO_TOTALS = { income: 0, expense: 0, balance: 0 };
 
 function dateField(title, value, onChange) {
   return el('label', { className: 'field' },
@@ -143,8 +142,8 @@ function selectField(title, value, options, onChange) {
   return el('label', { className: 'field' }, el('span', {}, title), select);
 }
 
-function allCategories() {
-  return [...new Set([...state.categories[KIND_EXPENSE], ...state.categories[KIND_INCOME]])];
+function allCategories(categories) {
+  return [...new Set([...categories.expense, ...categories.income])];
 }
 
 // Экран «Операции»: баланс, быстрые действия, фильтры и лента операций по дням.
@@ -184,7 +183,10 @@ function renderOperations() {
     render();
   };
   const filtered = Object.values(listFilter).some((value) => value !== '');
-  const operations = filterOperations(state.operations, listFilter);
+  const info = core.call('state');
+  // Ядро отклоняет фильтр, в котором начало периода позже конца.
+  const listed = core.call('list', listFilter);
+  const operations = listed.ok ? listed.operations : [];
 
   const action = (name, label, onclick) => el('button', { type: 'button', className: 'action', onclick },
     icon(name), el('span', {}, label));
@@ -192,7 +194,7 @@ function renderOperations() {
     currentView = name;
     render();
   };
-  const hero = heroCard(filtered ? 'Баланс по фильтру' : 'Общий баланс', operations,
+  const hero = heroCard(filtered ? 'Баланс по фильтру' : 'Общий баланс', listed.ok ? listed.totals : NO_TOTALS,
     el('div', { className: 'quick' },
       action('expense', 'Расход', () => openOperationDialog(null, KIND_EXPENSE)),
       action('income', 'Доход', () => openOperationDialog(null, KIND_INCOME)),
@@ -213,7 +215,7 @@ function renderOperations() {
     dateField('С даты', listFilter.from, (from) => setFilter({ from })),
     dateField('По дату', listFilter.to, (to) => setFilter({ to })),
     selectField('Категория', listFilter.category,
-      [['', 'Все'], ...allCategories().map((name) => [name, name])],
+      [['', 'Все'], ...allCategories(info.categories).map((name) => [name, name])],
       (category) => setFilter({ category })),
     selectField('Тип', listFilter.kind,
       [['', 'Все'], [KIND_INCOME, 'Доходы'], [KIND_EXPENSE, 'Расходы']],
@@ -224,7 +226,9 @@ function renderOperations() {
     }, 'Сбросить фильтр') : null);
 
   const list = [];
-  if (state.operations.length === 0) {
+  if (!listed.ok) {
+    list.push(el('p', { className: 'error empty' }, listed.error));
+  } else if (info.count === 0) {
     list.push(el('p', { className: 'hint empty' }, 'Операций пока нет. Первую можно добавить кнопкой «+».'));
   } else if (operations.length === 0) {
     list.push(el('p', { className: 'hint empty' }, 'Под этот фильтр не подходит ни одна операция.'));
@@ -258,22 +262,22 @@ function renderReport() {
     reportPeriod = { ...reportPeriod, ...patch };
     render();
   };
-  const operations = filterOperations(state.operations, reportPeriod);
-  const shares = expenseShares(operations);
+  const report = core.call('report', reportPeriod);
+  const shares = report.ok ? report.shares : [];
 
   const sharesCard = el('section', { className: 'card' },
     el('h3', {}, 'Расходы по категориям'),
     ...(shares.length === 0
-      ? [el('p', { className: 'hint' }, 'За этот период расходов нет.')]
+      ? [report.ok
+        ? el('p', { className: 'hint' }, 'За этот период расходов нет.')
+        : el('p', { className: 'error' }, report.error)]
       : shares.map((share) => el('div', { className: 'share' },
         el('div', { className: 'row' },
           el('span', {}, share.category),
           el('span', { className: 'amount' }, `${share.percent}% (${formatRubles(share.amount)})`)),
         el('div', { className: 'bar' }, el('i', { style: `width: ${share.percent}%` }))))));
 
-  // Прогноз считается по всей истории, а не по выбранному периоду:
-  // среднее за короткий отрезок слишком зависит от случайных трат.
-  const outlook = forecast(state.operations);
+  const outlook = report.ok ? report.forecast : null;
   const line = (title, amount) => el('div', { className: 'row' },
     el('span', { className: 'grow' }, title),
     el('span', { className: 'amount' }, formatRubles(amount)));
@@ -292,21 +296,28 @@ function renderReport() {
           : null,
       ]));
 
+  const exportButton = (title, format, type) => el('button', {
+    type: 'button',
+    className: 'button',
+    onclick: () => {
+      const exported = core.call('export', { ...reportPeriod, format });
+      if (exported.ok) {
+        openExportDialog(`report.${format}`, type, exported.text);
+      } else {
+        showToast(exported.error);
+      }
+    },
+  }, title);
   const exportCard = el('section', { className: 'card' },
     el('h3', {}, 'Экспорт отчёта'),
     el('div', { className: 'actions' },
-      el('button', {
-        type: 'button', className: 'button',
-        onclick: () => openExportDialog('report.txt', 'text/plain', buildTextReport(operations, reportPeriod)),
-      }, 'Текст (.txt)'),
-      el('button', {
-        type: 'button', className: 'button',
-        onclick: () => openExportDialog('report.csv', 'text/csv', buildCsv(operations)),
-      }, 'Таблица (.csv)')));
+      exportButton('Текст (.txt)', 'txt', 'text/plain'),
+      exportButton('Таблица (.csv)', 'csv', 'text/csv')));
 
   view.replaceChildren(
     el('h1', {}, 'Отчёты'),
-    heroCard(reportPeriod.from === '' && reportPeriod.to === '' ? 'Баланс за всё время' : 'Баланс за период', operations),
+    heroCard(reportPeriod.from === '' && reportPeriod.to === '' ? 'Баланс за всё время' : 'Баланс за период',
+      report.ok ? report.totals : NO_TOTALS),
     el('section', { className: 'card filters' },
       dateField('С даты', reportPeriod.from, (from) => setPeriod({ from })),
       dateField('По дату', reportPeriod.to, (to) => setPeriod({ to }))),
@@ -319,8 +330,7 @@ function renderReport() {
 
 function renderBudget() {
   const month = toStamp(new Date()).slice(0, 7);
-  const cards = state.categories[KIND_EXPENSE].map((category) => {
-    const status = checkLimit(state, category, month);
+  const cards = core.call('limits', { month }).items.map(({ category, spent, status }) => {
     const input = el('input', {
       type: 'text', inputMode: 'decimal', autocomplete: 'off', placeholder: 'без лимита',
       value: status === null ? '' : formatPlain(status.limit),
@@ -328,9 +338,8 @@ function renderBudget() {
     input.setAttribute('aria-label', `Лимит на «${category}», руб. в месяц`);
     const error = el('p', { className: 'error', hidden: true });
     const apply = () => {
-      const parsed = parseAmount(input.value);
-      const result = parsed.ok ? setLimit(state, category, parsed.value) : parsed;
-      if (!commit(result)) {
+      const result = change('setLimit', { category, amount: input.value });
+      if (!result.ok) {
         error.textContent = result.error;
         error.hidden = false;
       }
@@ -346,10 +355,10 @@ function renderBudget() {
     el('button', { type: 'submit', className: 'button small' }, 'Задать'),
     status === null ? null : el('button', {
       type: 'button', className: 'button small danger',
-      onclick: () => commit(clearLimit(state, category)),
+      onclick: () => change('clearLimit', { category }),
     }, 'Снять'));
 
-    let progress = [el('p', { className: 'hint' }, 'Лимит не задан.')];
+    let progress = [el('p', { className: 'hint' }, `Лимит не задан. Потрачено ${formatRubles(spent)}`)];
     if (status !== null) {
       const percent = Math.min(100, Math.round((status.spent * 100) / status.limit));
       progress = [
@@ -371,25 +380,26 @@ function renderBudget() {
 // Экран «Категории»: два списка с добавлением и удалением.
 
 function renderCategories() {
+  const { categories } = core.call('state');
   const block = (kind, title) => {
     const input = el('input', { type: 'text', maxLength: 30, autocomplete: 'off', placeholder: 'Новая категория' });
     input.setAttribute('aria-label', `Новая категория, ${title.toLowerCase()}`);
     const error = el('p', { className: 'error', hidden: true });
     const report = (result) => {
-      if (!commit(result)) {
+      if (!result.ok) {
         error.textContent = result.error;
         error.hidden = false;
       }
     };
     return el('section', { className: 'card' },
       el('h3', {}, title),
-      ...state.categories[kind].map((name) => el('div', { className: 'row' },
+      ...categories[kind].map((name) => el('div', { className: 'row' },
         el('span', { className: 'grow' }, name),
         el('button', {
           type: 'button', className: 'button small danger',
           onclick: async () => {
             if (await telegram.showConfirm(`Удалить категорию «${name}»?`)) {
-              report(removeCategory(state, kind, name));
+              report(change('removeCategory', { kind, name }));
             }
           },
         }, 'Удалить'))),
@@ -397,7 +407,7 @@ function renderCategories() {
         className: 'row',
         onsubmit: (event) => {
           event.preventDefault();
-          report(addCategory(state, kind, input.value));
+          report(change('addCategory', { kind, name: input.value }));
         },
       },
       el('div', { className: 'grow' }, input),
@@ -443,8 +453,9 @@ let editedId = null;
 
 function fillCategoryOptions(kind, selected) {
   const select = operationForm.elements.category;
-  select.replaceChildren(...state.categories[kind].map((name) => el('option', { value: name }, name)));
-  if (state.categories[kind].includes(selected)) {
+  const names = core.call('state').categories[kind];
+  select.replaceChildren(...names.map((name) => el('option', { value: name }, name)));
+  if (names.includes(selected)) {
     select.value = selected;
   }
 }
@@ -465,42 +476,36 @@ function openOperationDialog(operation = null, kind = KIND_EXPENSE) {
   operationDialog.showModal();
 }
 
-function limitWarning(operation) {
-  if (operation.kind !== KIND_EXPENSE) {
+// Текст предупреждения о превышении лимита или null. limit приходит из ядра
+// в ответе на добавление и правку операции.
+function limitWarning(operation, limit) {
+  if (limit === null || !limit.exceeded) {
     return null;
   }
-  const status = checkLimit(state, operation.category, operation.at.slice(0, 7));
-  if (status === null || !status.exceeded) {
-    return null;
-  }
-  return `Лимит на «${operation.category}» превышен: потрачено ${formatRubles(status.spent)} `
-    + `из ${formatRubles(status.limit)}, перерасход ${formatRubles(-status.left)}`;
+  return `Лимит на «${operation.category}» превышен: потрачено ${formatRubles(limit.spent)} `
+    + `из ${formatRubles(limit.limit)}, перерасход ${formatRubles(-limit.left)}`;
 }
 
 function submitOperation(event) {
   event.preventDefault();
   const { elements } = operationForm;
-  const parsed = parseAmount(elements.amount.value);
-  let result = parsed;
-  if (parsed.ok) {
-    const draft = {
-      // Поле даты может вернуть время с секундами, формат операции их не хранит.
-      at: elements.at.value.slice(0, 16),
-      amount: parsed.value,
-      kind: elements.kind.value,
-      category: elements.category.value,
-      note: elements.note.value,
-    };
-    result = editedId === null ? addOperation(state, draft) : updateOperation(state, editedId, draft);
-  }
-  if (!commit(result)) {
+  const fields = {
+    amount: elements.amount.value,
+    // Поле даты может вернуть время с секундами, формат операции их не хранит.
+    at: elements.at.value.slice(0, 16),
+    kind: elements.kind.value,
+    category: elements.category.value,
+    note: elements.note.value,
+  };
+  const result = editedId === null ? change('add', fields) : change('update', { ...fields, id: editedId });
+  if (!result.ok) {
     operationError.textContent = result.error;
     operationError.hidden = false;
     telegram.haptic('error');
     return;
   }
   operationDialog.close();
-  const warning = limitWarning(result.operation);
+  const warning = limitWarning(result.operation, result.limit);
   if (warning === null) {
     telegram.haptic('success');
   } else {
@@ -515,7 +520,7 @@ async function deleteOperation() {
   // поэтому сначала закрывается диалог.
   operationDialog.close();
   if (await telegram.showConfirm('Удалить эту операцию? Вернуть её будет нельзя.')) {
-    commit(removeOperation(state, id));
+    change('remove', { id });
   }
 }
 
@@ -578,24 +583,31 @@ function bindEvents() {
 
 async function load() {
   try {
+    core = await loadEngine(new URL('../wasm/xpay.wasm', import.meta.url));
+  } catch (error) {
+    view.replaceChildren(el('p', { className: 'error empty' }, `Приложение не запустилось. ${error.message}`));
+    return false;
+  }
+  try {
     const text = await loadText(telegram.store);
     if (text === null) {
       canSave = true;
-      return;
+      return true;
     }
-    const parsed = deserialize(text);
-    if (parsed.ok) {
-      state = parsed.state;
+    const loaded = core.call('load', { data: text });
+    if (loaded.ok) {
       canSave = true;
     } else {
-      showToast(`${parsed.error} Изменения в этот раз не сохранятся.`);
+      showToast(`${loaded.error} Изменения в этот раз не сохранятся.`);
     }
   } catch (error) {
     showToast(`Не удалось прочитать данные: ${error.message} Изменения в этот раз не сохранятся.`);
   }
+  return true;
 }
 
 telegram.start(BACKGROUND_COLOR);
-bindEvents();
-await load();
-render();
+if (await load()) {
+  bindEvents();
+  render();
+}
